@@ -1,0 +1,152 @@
+﻿@page "/tasks"
+
+@using TaskManagement.Client.Blazor.Services
+@using TaskManagement.Application.Features.Tasks.Dtos
+@inject TaskService TaskService
+@inject SignalRService SignalRService
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject NavigationManager Navigation
+
+<h3>لیست وظایف</h3>
+
+@if (isLoading)
+{
+    <p>در حال بارگذاری...</p>
+}
+else if (tasks is null || tasks.Count == 0)
+{
+    <p>هیچ وظیفه‌ای یافت نشد.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>عنوان</th>
+                <th>توضیحات</th>
+                <th>تاریخ سررسید</th>
+                <th>عملیات</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var task in tasks)
+            {
+                <tr>
+                    <td>@task.Title</td>
+                    <td>@task.Description</td>
+                    <td>@task.DueDate?.ToString("yyyy/MM/dd")</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning" @onclick="@(() => EditTask(task.Id))">ویرایش</button>
+                        <button class="btn btn-sm btn-danger" @onclick="@(() => DeleteTask(task.Id))">حذف</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<TaskDto>? tasks;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var token = await LocalStorage.GetItemAsync<string>("authToken");
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        try
+        {
+            await LoadTasksAsync();
+
+            SignalRService.OnTaskAdded += async (taskName) =>
+            {
+                Console.WriteLine($"📥 وظیفه جدید اضافه شد: {taskName}");
+                await LoadTasksAsync();
+                StateHasChanged();
+            };
+
+            SignalRService.OnTaskUpdated += async (updatedTask) =>
+            {
+                try
+                {
+                    Console.WriteLine($"✏️ وظیفه ویرایش شد: {updatedTask.Title}");
+
+                    var task = tasks?.FirstOrDefault(t => t.Id == updatedTask.Id);
+                    if (task != null)
+                    {
+                        task.Title = updatedTask.Title;
+                        task.Description = updatedTask.Description;
+                        task.DueDate = updatedTask.DueDate;
+                        StateHasChanged();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"خطا در پردازش وظیفه به‌روزرسانی شده: {ex.Message}");
+                }
+            };
+
+            SignalRService.OnTaskDeleted += async (taskId) =>
+            {
+                Console.WriteLine($"🗑️ وظیفه با شناسه {taskId} حذف شد");
+                var deleted = tasks?.FirstOrDefault(t => t.Id == taskId);
+                if (deleted is not null)
+                {
+                    tasks!.Remove(deleted);
+                }
+
+                StateHasChanged();
+            };
+
+            await SignalRService.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"خطا در مقداردهی اولیه: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadTasksAsync()
+    {
+        try
+        {
+            tasks = await TaskService.GetAllTasksAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"خطا در دریافت لیست وظایف: {ex.Message}");
+            tasks = new List<TaskDto>();
+        }
+    }
+
+    private async Task DeleteTask(Guid id)
+    {
+        try
+        {
+            await TaskService.DeleteTaskAsync(id);
+            
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"خطا در حذف وظیفه: {ex.Message}");
+        }
+    }
+
+    private void EditTask(Guid id)
+    {
+        Navigation.NavigateTo($"/edit-task/{id}");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await SignalRService.StopAsync();
+    }
+}

@@ -1,0 +1,105 @@
+﻿@page "/edit-task/{TaskId:guid}"
+@using TaskManagement.Application.Features.Tasks.Dtos
+@using TaskManagement.Application.Features.Tasks.Commands.UpdateTask
+@using TaskManagement.Client.Blazor.Services
+@inject TaskService TaskService
+@inject NavigationManager Navigation
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+
+<h3>ویرایش وظیفه</h3>
+
+@if (task == null)
+{
+    <p>در حال بارگذاری...</p>
+}
+else
+{
+    <EditForm Model="@command" OnValidSubmit="@HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="form-group">
+            <label for="title">عنوان:</label>
+            <InputText id="title" @bind-Value="command.Title" class="form-control" />
+            <ValidationMessage For="@(() => command.Title)" />
+        </div>
+
+        <div class="form-group">
+            <label for="description">توضیحات:</label>
+            <InputTextArea id="description" @bind-Value="command.Description" class="form-control" />
+        </div>
+
+        <div class="form-group">
+            <label for="dueDate">تاریخ سررسید:</label>
+            <InputDate id="dueDate" @bind-Value="command.DueDate" class="form-control" />
+        </div>
+
+        <button type="submit" class="btn btn-primary">ذخیره تغییرات</button>
+        <button type="button" class="btn btn-secondary" @onclick="Cancel">انصراف</button>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public Guid TaskId { get; set; }
+
+    private TaskDto? task;
+    private UpdateTaskCommand command = new UpdateTaskCommand();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var token = await LocalStorage.GetItemAsync<string>("authToken");
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                Navigation.NavigateTo("/login", forceLoad: true);
+                return;
+            }
+
+            task = await TaskService.GetTaskByIdAsync(TaskId);
+            if (task == null)
+            {
+                Navigation.NavigateTo("/not-found");
+                return;
+            }
+
+            command = new UpdateTaskCommand
+                {
+                    Id = task.Id,
+                    Title = task.Title,
+                    Description = task.Description,
+                    DueDate = task.DueDate
+                };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"خطا در بارگذاری وظیفه: {ex.Message}");
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            var result = await TaskService.UpdateTaskAsync(command);
+            if (result)
+            {
+                Navigation.NavigateTo("/tasks");
+            }
+            else
+            {
+                Console.WriteLine("خطا در ویرایش وظیفه");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"خطا در ویرایش وظیفه: {ex.Message}");
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/tasks");
+    }
+}

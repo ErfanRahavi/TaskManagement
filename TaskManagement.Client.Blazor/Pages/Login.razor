@@ -1,0 +1,49 @@
+﻿@page "/login"
+@using TaskManagement.Client.Blazor.Models.Auth
+@using Blazored.LocalStorage
+@using TaskManagement.Client.Blazor.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject ILocalStorageService LocalStorage
+
+<EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label>نام کاربری:</label>
+        <InputText class="form-control" @bind-Value="loginModel.Username" />
+    </div>
+
+    <div class="mb-3">
+        <label>رمز عبور:</label>
+        <InputText type="password" class="form-control" @bind-Value="loginModel.Password" />
+    </div>
+
+    <button class="btn btn-primary" type="submit">ورود</button>
+
+    @if (loginFailed)
+    {
+        <div class="text-danger mt-2">ورود ناموفق بود. لطفاً دوباره تلاش کنید.</div>
+    }
+</EditForm>
+
+@code {
+    private LoginModel loginModel = new();
+    private bool loginFailed;
+
+    private async Task HandleLogin()
+    {
+        loginFailed = false;
+
+        var success = await AuthService.LoginAsync(loginModel);
+        if (success)
+        {
+            Navigation.NavigateTo("/tasks");
+        }
+        else
+        {
+            loginFailed = true;
+        }
+    }
+}
